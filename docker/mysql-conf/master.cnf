@@ -1,0 +1,31 @@
+[mysqld]
+# 服务器ID，必须唯一
+server-id=1
+
+# 启用二进制日志
+log-bin=mysql-bin
+
+# 二进制日志格式
+binlog-format=ROW
+
+# 自动递增变量的步长和偏移量
+auto-increment-increment=1
+auto-increment-offset=1
+
+# 忽略复制的数据库（可选）
+# binlog-ignore-db=information_schema
+# binlog-ignore-db=mysql
+# binlog-ignore-db=performance_schema
+# binlog-ignore-db=sys
+
+# 要复制的数据库（可选）
+# binlog-do-db=${MYSQL_DATABASE:-vue_springboot_db}
+
+# 保存二进制日志的天数
+expire_logs_days=7
+
+# 允许从服务器连接
+max_connections=200
+
+# 跳过复制错误（生产环境慎用）
+# slave-skip-errors=1062

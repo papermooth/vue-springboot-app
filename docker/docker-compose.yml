@@ -1,0 +1,222 @@
+version: '3.8'
+
+services:
+  # MySQL主节点
+  mysql-master:
+    image: mysql:8.0
+    container_name: mysql-master
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-vue_springboot_db}
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
+    volumes:
+      - mysql-master-data:/var/lib/mysql
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./mysql-conf/master.cnf:/etc/mysql/conf.d/master.cnf
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    networks:
+      - app-network
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+
+  # MySQL从节点1
+  mysql-slave-1:
+    image: mysql:8.0
+    container_name: mysql-slave-1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-vue_springboot_db}
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
+    volumes:
+      - mysql-slave-1-data:/var/lib/mysql
+      - ./mysql-conf/slave.cnf:/etc/mysql/conf.d/slave.cnf
+    ports:
+      - "3307:3306"
+    networks:
+      - app-network
+    depends_on:
+      - mysql-master
+    restart: unless-stopped
+
+  # MySQL从节点2
+  mysql-slave-2:
+    image: mysql:8.0
+    container_name: mysql-slave-2
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-vue_springboot_db}
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
+    volumes:
+      - mysql-slave-2-data:/var/lib/mysql
+      - ./mysql-conf/slave.cnf:/etc/mysql/conf.d/slave.cnf
+    ports:
+      - "3308:3306"
+    networks:
+      - app-network
+    depends_on:
+      - mysql-master
+    restart: unless-stopped
+
+  # MySQL主从复制初始化
+  mysql-replication-init:
+    image: mysql:8.0
+    container_name: mysql-replication-init
+    depends_on:
+      - mysql-master
+      - mysql-slave-1
+      - mysql-slave-2
+    networks:
+      - app-network
+    volumes:
+      - ./init-scripts/setup-replication-new.sh:/setup-replication.sh
+    entrypoint: sh -c "chmod +x /setup-replication.sh && sh /setup-replication.sh"
+    restart: "no"
+
+  # Redis集群 - 主节点1
+  redis-master-1:
+    image: redis:6.2-alpine
+    container_name: redis-master-1
+    ports:
+      - "7001:7001"
+    volumes:
+      - ./redis-conf/redis-master-1.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - app-network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+
+  # Redis集群 - 主节点2
+  redis-master-2:
+    image: redis:6.2-alpine
+    container_name: redis-master-2
+    ports:
+      - "7002:7002"
+    volumes:
+      - ./redis-conf/redis-master-2.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - app-network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+
+  # Redis集群 - 主节点3
+  redis-master-3:
+    image: redis:6.2-alpine
+    container_name: redis-master-3
+    ports:
+      - "7003:7003"
+    volumes:
+      - ./redis-conf/redis-master-3.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - app-network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+
+  # Redis集群 - 从节点1
+  redis-replica-1:
+    image: redis:6.2-alpine
+    container_name: redis-replica-1
+    ports:
+      - "7004:7004"
+    volumes:
+      - ./redis-conf/redis-replica-1.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - app-network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+
+  # Redis集群 - 从节点2
+  redis-replica-2:
+    image: redis:6.2-alpine
+    container_name: redis-replica-2
+    ports:
+      - "7005:7005"
+    volumes:
+      - ./redis-conf/redis-replica-2.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - app-network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+
+  # Redis集群 - 从节点3
+  redis-replica-3:
+    image: redis:6.2-alpine
+    container_name: redis-replica-3
+    ports:
+      - "7006:7006"
+    volumes:
+      - ./redis-conf/redis-replica-3.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - app-network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+
+  # Redis集群初始化脚本
+  redis-cluster-init:
+    image: redis:6.2-alpine
+    container_name: redis-cluster-init
+    depends_on:
+      - redis-master-1
+      - redis-master-2
+      - redis-master-3
+      - redis-replica-1
+      - redis-replica-2
+      - redis-replica-3
+    networks:
+      - app-network
+    volumes:
+      - ./init-scripts/create-redis-cluster.sh:/create-redis-cluster.sh
+    entrypoint: sh -c "sleep 10 && sh /create-redis-cluster.sh"
+    restart: "no"
+
+  # 后端服务
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile-backend
+    container_name: backend
+    depends_on:
+      - mysql-master
+      - redis-cluster-init
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-master:3306/${MYSQL_DATABASE:-vue_springboot_db}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-appuser}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
+      SPRING_REDIS_HOST: redis-master-1
+      SPRING_REDIS_PORT: 7001
+      SPRING_REDIS_PASSWORD: 
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # 前端服务
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile-frontend
+    container_name: frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+# 网络配置
+networks:
+  app-network:
+    driver: bridge
+
+# 数据卷配置
+volumes:
+  mysql-master-data:
+  mysql-slave-1-data:
+  mysql-slave-2-data:

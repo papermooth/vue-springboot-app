@@ -27,6 +27,7 @@ public class User implements Serializable {
 
     private String phone;
 
+    @Column(name = "full_name")
     private String fullName;
 
     @Column(name = "created_at", updatable = false)

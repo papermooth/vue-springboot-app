@@ -21,7 +21,9 @@
 /root/vue-springboot-app/backend/src/main/java/com/example/demo/VueSpringbootBackendApplication.java
 /root/vue-springboot-app/backend/src/main/java/com/example/demo/service/impl/UserServiceImpl.java
 /root/vue-springboot-app/backend/src/main/java/com/example/demo/exception/ResourceNotFoundException.java
+/root/vue-springboot-app/backend/src/main/java/com/example/vuespringbootapp/config/DataSourceAspect.java
 /root/vue-springboot-app/backend/src/main/java/com/example/demo/service/UserService.java
 /root/vue-springboot-app/backend/src/main/java/com/example/demo/service/impl/ProductServiceImpl.java
 /root/vue-springboot-app/backend/src/main/java/com/example/demo/controller/ProductController.java
 /root/vue-springboot-app/backend/src/main/java/com/example/demo/config/RedisConfig.java
+/root/vue-springboot-app/backend/src/main/java/com/example/vuespringbootapp/config/DataSourceConfig.java

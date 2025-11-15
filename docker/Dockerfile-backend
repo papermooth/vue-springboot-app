@@ -1,0 +1,12 @@
+FROM openjdk:17.0.2-slim
+
+WORKDIR /app
+
+# 复制构建的JAR文件
+COPY ./backend/target/demo-0.0.1-SNAPSHOT.jar app.jar
+
+# 设置端口
+EXPOSE 8080
+
+# 设置启动命令
+ENTRYPOINT ["java", "-jar", "app.jar"]
