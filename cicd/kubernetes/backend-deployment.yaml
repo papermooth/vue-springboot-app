@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vue-springboot-backend
+  namespace: vue-springboot
+  labels:
+    app: vue-springboot-backend
+    app.kubernetes.io/name: vue-springboot-backend
+    app.kubernetes.io/instance: vue-springboot
+    app.kubernetes.io/version: BACKEND_IMAGE_TAG
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vue-springboot-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: vue-springboot-backend
+        app.kubernetes.io/name: vue-springboot-backend
+        app.kubernetes.io/instance: vue-springboot
+        app.kubernetes.io/version: BACKEND_IMAGE_TAG
+    spec:
+      containers:
+      - name: vue-springboot-backend
+        image: harbor.example.com/vue-springboot/vue-springboot-backend:BACKEND_IMAGE_TAG
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+        readinessProbe:
+          httpGet:
+            path: /api/actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /api/actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /api/actuator/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 30
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: vue-springboot-backend-config
+      imagePullSecrets:
+      - name: harbor-registry-credentials

@@ -1,0 +1,163 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Harbor相关配置
+        HARBOR_URL = '${HARBOR_URL}'  // Harbor地址，通过Jenkins凭据提供
+        HARBOR_PROJECT = 'vue-springboot'  // Harbor项目名称
+        HARBOR_CREDENTIALS = 'harbor-credentials'  // Jenkins中配置的Harbor凭据ID
+        
+        // 镜像相关配置
+        BACKEND_IMAGE_NAME = "${HARBOR_URL}/${HARBOR_PROJECT}/vue-springboot-backend"
+        FRONTEND_IMAGE_NAME = "${HARBOR_URL}/${HARBOR_PROJECT}/vue-springboot-frontend"
+        IMAGE_TAG = "${BUILD_NUMBER}"  // 使用构建号作为镜像标签
+        
+        // SonarQube相关配置
+        SONAR_URL = '${SONAR_URL}'  // SonarQube地址，通过Jenkins凭据提供
+        SONAR_TOKEN = credentials('sonar-token')  // Jenkins中配置的SonarQube令牌
+        
+        // Kubernetes相关配置
+        K8S_NAMESPACE = 'vue-springboot'  // Kubernetes命名空间
+        K8S_CONFIG_FILE = '${K8S_CONFIG_FILE}'  // Kubernetes配置文件路径
+    }
+    
+    stages {
+        stage('代码检出') {
+            steps {
+                checkout scm
+                echo "代码检出完成，构建号: ${BUILD_NUMBER}"
+            }
+        }
+        
+        stage('后端代码质量检测') {
+            steps {
+                withSonarQubeEnv('SonarQube') {  // 'SonarQube'是Jenkins中配置的SonarQube服务器名称
+                    dir('backend') {
+                        sh '''
+                            mvn sonar:sonar \
+                              -Dsonar.projectKey=vue-springboot-backend \
+                              -Dsonar.projectName=vue-springboot-backend \
+                              -Dsonar.host.url=${SONAR_URL} \
+                              -Dsonar.login=${SONAR_TOKEN}
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('前端代码质量检测') {
+            steps {
+                withSonarQubeEnv('SonarQube') {  // 'SonarQube'是Jenkins中配置的SonarQube服务器名称
+                    dir('frontend') {
+                        // 安装SonarQube Scanner CLI（如果需要）
+                        sh '''
+                            npm install
+                            npx sonar-scanner \
+                              -Dsonar.projectKey=vue-springboot-frontend \
+                              -Dsonar.projectName=vue-springboot-frontend \
+                              -Dsonar.host.url=${SONAR_URL} \
+                              -Dsonar.login=${SONAR_TOKEN} \
+                              -Dsonar.sourceEncoding=UTF-8 \
+                              -Dsonar.sources=src \
+                              -Dsonar.exclusions=node_modules/**/*,**/*.test.js,**/*.spec.js
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('代码质量门禁') {
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        
+        stage('构建后端Docker镜像') {
+            steps {
+                sh '''
+                    docker build -t ${BACKEND_IMAGE_NAME}:${IMAGE_TAG} \
+                                -f docker/Dockerfile-backend .
+                    docker tag ${BACKEND_IMAGE_NAME}:${IMAGE_TAG} ${BACKEND_IMAGE_NAME}:latest
+                '''
+            }
+        }
+        
+        stage('构建前端Docker镜像') {
+            steps {
+                sh '''
+                    docker build -t ${FRONTEND_IMAGE_NAME}:${IMAGE_TAG} \
+                                -f docker/Dockerfile-frontend .
+                    docker tag ${FRONTEND_IMAGE_NAME}:${IMAGE_TAG} ${FRONTEND_IMAGE_NAME}:latest
+                '''
+            }
+        }
+        
+        stage('推送镜像到Harbor') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: env.HARBOR_CREDENTIALS, 
+                                                  usernameVariable: 'HARBOR_USERNAME', 
+                                                  passwordVariable: 'HARBOR_PASSWORD')]) {
+                    sh '''
+                        echo "${HARBOR_PASSWORD}" | docker login ${HARBOR_URL} -u "${HARBOR_USERNAME}" --password-stdin
+                        docker push ${BACKEND_IMAGE_NAME}:${IMAGE_TAG}
+                        docker push ${BACKEND_IMAGE_NAME}:latest
+                        docker push ${FRONTEND_IMAGE_NAME}:${IMAGE_TAG}
+                        docker push ${FRONTEND_IMAGE_NAME}:latest
+                    '''
+                }
+            }
+        }
+        
+        stage('部署到Kubernetes') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh '''
+                        # 设置Kubernetes配置文件
+                        export KUBECONFIG=${KUBECONFIG}
+                        
+                        # 替换Kubernetes配置文件中的镜像标签
+                        sed -i "s|BACKEND_IMAGE_TAG|${IMAGE_TAG}|g" cicd/kubernetes/backend-deployment.yaml
+                        sed -i "s|FRONTEND_IMAGE_TAG|${IMAGE_TAG}|g" cicd/kubernetes/frontend-deployment.yaml
+                        
+                        # 应用Kubernetes配置
+                        kubectl apply -f cicd/kubernetes/namespace.yaml
+                        kubectl apply -f cicd/kubernetes/backend-config.yaml
+                        kubectl apply -f cicd/kubernetes/backend-deployment.yaml
+                        kubectl apply -f cicd/kubernetes/backend-service.yaml
+                        kubectl apply -f cicd/kubernetes/frontend-deployment.yaml
+                        kubectl apply -f cicd/kubernetes/frontend-service.yaml
+                        kubectl apply -f cicd/kubernetes/ingress.yaml
+                        
+                        echo "部署完成，镜像标签: ${IMAGE_TAG}"
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo "流水线构建成功！镜像标签: ${IMAGE_TAG}"
+            // 可以添加通知，如发送邮件或Slack消息
+        }
+        failure {
+            echo "流水线构建失败！"
+            // 可以添加失败通知
+        }
+        always {
+            // 清理工作空间
+            cleanWs(cleanWhenNotBuilt: false, 
+                    deleteDirs: true, 
+                    disableDeferredWipeout: true)
+            // 清理本地Docker镜像（可选）
+            sh '''
+                docker rmi ${BACKEND_IMAGE_NAME}:${IMAGE_TAG} || true
+                docker rmi ${BACKEND_IMAGE_NAME}:latest || true
+                docker rmi ${FRONTEND_IMAGE_NAME}:${IMAGE_TAG} || true
+                docker rmi ${FRONTEND_IMAGE_NAME}:latest || true
+            '''
+        }
+    }
+}

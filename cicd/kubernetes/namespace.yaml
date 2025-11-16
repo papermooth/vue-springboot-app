@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vue-springboot
+  labels:
+    name: vue-springboot
+    app.kubernetes.io/name: vue-springboot
+    app.kubernetes.io/instance: vue-springboot

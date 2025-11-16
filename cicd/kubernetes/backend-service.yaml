@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vue-springboot-backend
+  namespace: vue-springboot
+  labels:
+    app: vue-springboot-backend
+    app.kubernetes.io/name: vue-springboot-backend
+    app.kubernetes.io/instance: vue-springboot
+spec:
+  selector:
+    app: vue-springboot-backend
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  type: ClusterIP

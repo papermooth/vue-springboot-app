@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vue-springboot-frontend
+  namespace: vue-springboot
+  labels:
+    app: vue-springboot-frontend
+    app.kubernetes.io/name: vue-springboot-frontend
+    app.kubernetes.io/instance: vue-springboot
+    app.kubernetes.io/version: FRONTEND_IMAGE_TAG
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vue-springboot-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: vue-springboot-frontend
+        app.kubernetes.io/name: vue-springboot-frontend
+        app.kubernetes.io/instance: vue-springboot
+        app.kubernetes.io/version: FRONTEND_IMAGE_TAG
+    spec:
+      containers:
+      - name: vue-springboot-frontend
+        image: harbor.example.com/vue-springboot/vue-springboot-frontend:FRONTEND_IMAGE_TAG
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+      imagePullSecrets:
+      - name: harbor-registry-credentials
